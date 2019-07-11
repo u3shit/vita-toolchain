@@ -142,11 +142,11 @@ int generate_assembly(vita_imports_t **imports, int imports_count)
 					if ((fp = fopen(filename, "w")) == NULL)
 						return 0;
 					fprintf(fp, ".arch armv7a\n\n");
-					fprintf(fp, ".section .vitalink.vstubs.%s,\"aw\",%%progbits\n\n",module->name);
+					fprintf(fp, ".section .vitalink.vstubs.%s,\"ax\",%%progbits\n\n",module->name);
 					fprintf(fp,
 						"\t.align 4\n"
 						"\t.global %s\n"
-						"\t.type %s, %%object\n"
+						"\t.type %s, %%function\n"
 						"%s:\n"
 						".if GEN_WEAK_EXPORTS\n"
 						"\t.word 0x00000008\n"
@@ -155,6 +155,11 @@ int generate_assembly(vita_imports_t **imports, int imports_count)
 						".endif //GEN_WEAK_EXPORTS\n"
 						"\t.word 0x%08X\n"
 						"\t.word 0x%08X\n"
+						"\t.word 0\n"
+						"\t.word 0\n"
+						"\t.word 0\n"
+						"\t.word 0\n"
+						"\t.word 0\n"
 						"\t.align 4\n\n",
 						vname, vname, vname,
 						module->NID,

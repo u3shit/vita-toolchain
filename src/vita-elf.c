@@ -35,7 +35,7 @@
 
 static void free_rela_table(vita_elf_rela_table_t *rtable);
 
-static int load_stubs(Elf_Scn *scn, int *num_stubs, vita_elf_stub_t **stubs, char *name)
+static int load_stubs(Elf_Scn *scn, int *num_stubs, vita_elf_stub_t **stubs, char *name, int size)
 {
 	GElf_Shdr shdr;
 	Elf_Data *data;
@@ -47,22 +47,22 @@ static int load_stubs(Elf_Scn *scn, int *num_stubs, vita_elf_stub_t **stubs, cha
 	gelf_getshdr(scn, &shdr);
 
 	old_num = *num_stubs;
-	*num_stubs = old_num + shdr.sh_size / 16;
+	*num_stubs = old_num + shdr.sh_size / size;
 	*stubs = realloc(*stubs, *num_stubs * sizeof(vita_elf_stub_t));
-	memset(&(*stubs)[old_num], 0, sizeof(vita_elf_stub_t) * shdr.sh_size / 16);
-	
+	memset(&(*stubs)[old_num], 0, sizeof(vita_elf_stub_t) * shdr.sh_size / size);
+
 	name = strrchr(name,'.')+1;
-	
+
 	curstub = *stubs;
-	curstub = &curstub[*num_stubs - (shdr.sh_size / 16)];
-	
+	curstub = &curstub[*num_stubs - (shdr.sh_size / size)];
+
 	data = NULL; total_bytes = 0;
 	while (total_bytes < shdr.sh_size &&
 			(data = elf_getdata(scn, data)) != NULL) {
 
 		for (stub_data = (uint32_t *)data->d_buf, chunk_offset = 0;
 				chunk_offset < data->d_size;
-				stub_data += 4, chunk_offset += 16) {
+				stub_data += size/4, chunk_offset += size) {
 			curstub->addr = shdr.sh_addr + data->d_off + chunk_offset;
 			curstub->module = vita_imports_module_new(name,false,0,0,0);
 			curstub->module->flags = le32toh(stub_data[0]);
@@ -445,12 +445,12 @@ vita_elf_t *vita_elf_load(const char *filename, int check_stub_count)
 		if (shdr.sh_type == SHT_PROGBITS && strncmp(name, ".vitalink.fstubs", strlen(".vitalink.fstubs")) == 0) {
 			int ndxscn = elf_ndxscn(scn);
 			varray_push(&ve->fstubs_va,&ndxscn);
-			if (!load_stubs(scn, &ve->num_fstubs, &ve->fstubs, name))
+			if (!load_stubs(scn, &ve->num_fstubs, &ve->fstubs, name, 16))
 				goto failure;
 		} else if (shdr.sh_type == SHT_PROGBITS && strncmp(name, ".vitalink.vstubs", strlen(".vitalink.vstubs")) == 0) {
 			int ndxscn = elf_ndxscn(scn);
 			varray_push(&ve->vstubs_va,&ndxscn);
-			if (!load_stubs(scn, &ve->num_vstubs, &ve->vstubs, name))
+			if (!load_stubs(scn, &ve->num_vstubs, &ve->vstubs, name, 32))
 				goto failure;
 		}
 
@@ -484,7 +484,7 @@ vita_elf_t *vita_elf_load(const char *filename, int check_stub_count)
 	}
 
 	if (ve->vstubs_va.count != 0) {
-		if (!lookup_stub_symbols(ve, ve->num_vstubs, ve->vstubs, &ve->vstubs_va, STT_OBJECT)) goto failure;
+		if (!lookup_stub_symbols(ve, ve->num_vstubs, ve->vstubs, &ve->vstubs_va, STT_FUNC)) goto failure;
 	}
 
 	ELF_ASSERT(elf_getphdrnum(ve->elf, &segment_count) == 0);

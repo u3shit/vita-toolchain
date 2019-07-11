@@ -20,6 +20,17 @@ const uint32_t sce_elf_stub_func[3] = {
 	0xe1a00000	/* mov r0, r0 */
 };
 
+static const uint32_t sce_elf_stub_var_func[8] = {
+	0xe3000000, /* mov r0, #0 */
+	0xe3400000, /* movt r0, #0 */
+	0xe12fff1e, /* bx lr */
+	0x00000140, /* header for 1 reloc */
+	0x00002b01, /* short reloc R_ARM_MOVW_ABS_NC */
+	0x00000000, /* fill with addr */
+	0x00002c01, /* short reloc R_ARM_MOVT_ABS */
+	0x00000000, /* fill with addr+4 */
+};
+
 #define ALIGN_4(size) (((size) + 3) & ~0x3)
 
 typedef struct {
@@ -280,7 +291,7 @@ static void set_module_import(vita_elf_t *ve, sce_module_imports_t *import, cons
 	import->var_entry_table = calloc(module->variables_va.count, sizeof(void *));
 	for (i = 0; i < module->variables_va.count; i++) {
 		import->var_nid_table[i] = module->variables[i].target_nid;
-		import->var_entry_table[i] = vita_elf_vaddr_to_host(ve, module->variables[i].addr);
+		import->var_entry_table[i] = vita_elf_vaddr_to_host(ve, module->variables[i].addr + 12);
 	}
 }
 
@@ -981,9 +992,18 @@ int sce_elf_rewrite_stubs(Elf *dest, const vita_elf_t *ve)
 		
 		data = NULL;
 		while ((data = elf_getdata(scn, data)) != NULL) {
+            uint32_t off = shdr.sh_addr + data->d_off;
 			for (stubdata = (uint32_t *)data->d_buf;
-					(void *)stubdata < data->d_buf + data->d_size - 11; stubdata += 4) {
-				memset(stubdata, 0, 16);
+					(void *)stubdata < data->d_buf + data->d_size - 11; stubdata += 8) {
+				stubdata[0] = htole32(sce_elf_stub_var_func[0]);
+				stubdata[1] = htole32(sce_elf_stub_var_func[1]);
+				stubdata[2] = htole32(sce_elf_stub_var_func[2]);
+				stubdata[3] = htole32(sce_elf_stub_var_func[3]);
+				stubdata[4] = htole32(sce_elf_stub_var_func[4]);
+				stubdata[5] = htole32(off); // addr
+				stubdata[6] = htole32(sce_elf_stub_var_func[6]);
+				stubdata[7] = htole32(off + 4); // addr+4
+				off += 32;
 			}
 		}
 	}
